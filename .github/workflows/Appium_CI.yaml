@@ -1,0 +1,75 @@
+# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
+
+name: Run Appium tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  appium-tests:
+    name: Run Appium tests from test directory
+    runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: 18
+      # Change this to the command you use to run tests.
+      # Examples:
+      # - "npm test" (if package.json test script runs tests in ./test)
+      # - "npx mocha ./test --recursive"
+      TEST_COMMAND: "npx mocha ./test --recursive"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install project dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Install Appium CLI
+        run: |
+          # Install Appium globally. Adjust version if needed.
+          npm install -g appium@latest
+
+      - name: Start Appium server
+        run: |
+          # Start Appium in the background and wait until it's ready.
+          nohup appium --port 4723 > appium.log 2>&1 &
+          echo "Waiting for Appium to be ready on http://localhost:4723/status ..."
+          for i in {1..30}; do
+            if curl -s http://localhost:4723/status | grep -q '"ready"\|"status"'; then
+              echo "Appium is up"
+              break
+            fi
+            sleep 2
+          done
+          cat appium.log || true
+
+      # Optional: configure and start an Android emulator here if your tests require it.
+      # Common approach: use reactivecircus/android-emulator-runner action or install Android SDK/emulator and start one.
+      # Example (commented):
+      # - name: Start Android emulator
+      #   uses: reactivecircus/android-emulator-runner@v2
+      #   with:
+      #     api-level: 30
+      #     arch: x86_64
+      #     target: google_apis
+      #     emulator-options: -no-window -noaudio -gpu swiftshader_indirect
+
+      - name: Run Appium tests (from ./test)
+        run: |
+          echo "Running tests with: $TEST_COMMAND"
+          # Fail the job if tests exit non-zero
+          bash -lc "$TEST_COMMAND"
